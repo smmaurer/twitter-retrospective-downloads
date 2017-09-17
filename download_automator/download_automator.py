@@ -70,7 +70,7 @@ class Downloader(object):
         return api.request(endpoint, params)
 
     
-    def manage_download(self):
+    def download(self):
         '''Initialize and manage the download process'''
         
         while True:
