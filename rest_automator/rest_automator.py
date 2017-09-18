@@ -21,7 +21,7 @@ RATE_LIMIT = 1.0  # pause between queries, in seconds
 COMPRESS = False  # whether to zip the resulting data file
 
 
-class Downloader(object):
+class Automator(object):
 
     def __init__(
             self,
