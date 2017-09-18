@@ -18,7 +18,7 @@ FNAME_BASE = 'retrospective-'  # default filename prefix (timestamp will be appe
 ROWS_PER_FILE = 500000  # 500k tweets is about 1.6 GB uncompressed
 DELAY = 5.0  # initial reconnection delay in seconds
 RATE_LIMIT = 1.0  # pause between queries, in seconds
-COMPRESS = True  # whether to zip the resulting data file
+COMPRESS = False  # whether to zip the resulting data file
 
 
 class Downloader(object):
@@ -31,7 +31,8 @@ class Downloader(object):
             geo_only = False,
             fname_base = FNAME_BASE ):
     
-        self.api = TwitterAPI(consumer_key, consumer_secret, access_token, access_token_secret)
+        self.api = TwitterAPI(consumer_key, consumer_secret, 
+                              access_token, access_token_secret)
 
         self.user_ids = user_ids
         self.ts_min = ts_min
@@ -67,49 +68,52 @@ class Downloader(object):
                 'max_id': last_post_id - 1, 
                 'include_rts': 'false' }
         
-        return api.request(endpoint, params)
+        return self.api.request(endpoint, params)
 
     
     def download(self):
         '''Initialize and manage the download process'''
         
-        while True:
-            try: 
-                for uid in self.user_ids:
+        try: 
+            for uid in self.user_ids:
+                try:
                     self.process_user(uid)
 
-            except KeyboardInterrupt:
-                try:
-                    self._close_files()
-                except:
-                    pass
-                print
-                return
-        
-           except Exception, e:
-                # Most likely a TwitterRequestError - continue with next user, but with 
-                # increasing delays in case it's a connection or rate limit issue
-                self.delay = self.delay * 2
-                print("\n" + str(dt.now()))
-                print("{}: {}".format(type(e).__name__, e))
-                print("Attempting to reconnect after {} sec. delay".format(self.delay))
-                time.sleep(self.delay)
-                continue
+                except TwitterRequestError:
+                    # Continue with next user, but with increasing delays in case there's
+                    # some other issue
+                    self.delay = self.delay * 2
+                    print("\n" + str(dt.now()))
+                    print("{}: {}".format(type(e).__name__, e))
+                    print("Continuing after {} sec. delay".format(self.delay))
+                    time.sleep(self.delay)
+                    continue
+                    
+            self._close_files()
 
-        
+        except KeyboardInterrupt:
+            try:
+                self._close_files()
+            except:
+                pass
+            print
+            return
+    
+
     def process_user(self, uid):
         '''Download posts for one user'''
     
         last_post_id = None
         last_ts = None
-        try:
-            r = page_tweets(uid, last_post_id)
-            
+        
+        while True:
+            r = self.page_tweets(uid, last_post_id)
+        
             response_len = 0
             for item in r.get_iterator():
                 response_len += 1
                 try:
-                    last_id = item['id']
+                    last_post_id = item['id']
                     last_ts = time.strptime(item['created_at'], 
                             '%a %b %d %H:%M:%S +0000 %Y')
                     if (last_ts >= self.ts_min) & (last_ts < self.ts_max):
@@ -117,21 +121,21 @@ class Downloader(object):
                             self._save_item(item)
                         elif (self.geo_only & (item['coordinates'] | item['place'])):
                             self._save_item(item)
-                        
+                    
                 except ValueError:
-                    # A necessary key is missing, either because it's a status  message 
+                    # A necessary key is missing, either because it's a status message 
                     # or the tweet is badly formed
                     if 'message' in item:
                         self._save_item(item)
                     else:
                         continue
-            
+        
             time.sleep(RATE_LIMIT)
 
             if (response_len == 0):
                 # No more tweets left from a user
                 return
-                
+            
             if (last_ts < self.ts_min):
                 # We've passed the time window of interest
                 # Warning: will break too soon if there are native retweets
@@ -152,7 +156,7 @@ class Downloader(object):
             self.f.write(json.dumps(item) + '\n')
             self.tcount += 1
         except:
-            continue
+            return
 
         # close the output file when it fills up
         if (self.tcount >= ROWS_PER_FILE):
