@@ -46,6 +46,8 @@ class Automator(object):
         self.f = None  # output file
         self.tcount = 0  # tweet count in current file
         self.fcount = 0  # count of output files
+        self.nusers = len(user_ids)  # total number of user id's
+        self.ucount = 0  # count of user id's
         self._reset_delay()
     
     
@@ -86,6 +88,10 @@ class Automator(object):
     def process_user(self, uid):
         '''Download posts for one user'''
     
+        self.ucount += 1
+        status_ts = dt.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(status_ts + " User " + str(self.ucount) + " of " + str(self.nusers))
+        
         last_post_id = None
         last_ts = None
         
@@ -108,7 +114,8 @@ class Automator(object):
                     
                 except ValueError:
                     # A necessary key is missing, either because the item is an API 
-                    # status message (save it) or a badly formed tweet (skip it)
+                    # status message (save it) or a badly formed tweet (skip it); see
+                    # http://geduldig.github.io/TwitterAPI/errors.html
                     if 'message' in item:
                         self._save_item(item)
                     else:
@@ -117,7 +124,11 @@ class Automator(object):
             time.sleep(RATE_LIMIT_INTERVAL)
 
             if (item_count == 0):
-                # No more tweets left from a user
+                # No more tweets left from a user (we've either paged through all of them,
+                # reached the API limit, or the entire batch is native retweets)
+                msg = {"custom_status": "reached_limit", "user_id": uid,
+                       "limit_date": time.strftime('%Y-%m-%d', last_ts)}
+                self._save_item(msg)
                 return
             
             if (last_ts < self.ts_min):
