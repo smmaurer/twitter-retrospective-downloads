@@ -64,14 +64,15 @@ class Automator(object):
                 try:
                     self.process_user(uid)
 
-                except TwitterError.TwitterRequestError:
+                except (TwitterError.TwitterRequestError, 
+                            TwitterError.TwitterConnectionError) as e:
                     # Continue with next user, but with increasing delays in case there's
                     # some other issue
                     self.delay = self.delay * 2
                     print("\n" + str(dt.now()))
                     print("{}: {}".format(type(e).__name__, e))
-                    print("Continuing after {} sec. delay".format(self.delay))
-                    time.sleep(self.delay)
+                    print("Continuing after {} sec. delay".format(RATE_LIMIT_INTERVAL))
+                    time.sleep(RATE_LIMIT_INTERVAL)
                     continue
                     
             self._close_files()
@@ -126,9 +127,12 @@ class Automator(object):
             if (item_count == 0):
                 # No more tweets left from a user (we've either paged through all of them,
                 # reached the API limit, or the entire batch is native retweets)
-                msg = {"custom_status": "reached_limit", "user_id": uid,
-                       "limit_date": time.strftime('%Y-%m-%d', last_ts)}
-                self._save_item(msg)
+                try:
+                    msg = {"custom_status": "reached_limit", "user_id": uid,
+                           "limit_date": time.strftime('%Y-%m-%d', last_ts)}
+                    self._save_item(msg)
+                except:
+                    pass
                 return
             
             if (last_ts < self.ts_min):
