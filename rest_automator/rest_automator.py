@@ -15,7 +15,7 @@ from keys import *   # keys.py in same directory
 
 OUTPUT_PATH = 'data/'  # output path relative to the script calling this class
 FNAME_BASE = 'retrospective-'  # default filename prefix (file count will be appended)
-SUFFIX_DIGITS = 3  # min digits for filename suffix (2=01, 3=001, etc)
+SUFFIX_DIGITS = 2  # min digits for filename suffix (2=01, 3=001, etc)
 ROWS_PER_FILE = 500000  # 500k tweets is about 1.6 GB uncompressed
 DELAY = 5.0  # initial reconnection delay in seconds
 RATE_LIMIT_INTERVAL = 1.0  # pause between queries, in seconds
