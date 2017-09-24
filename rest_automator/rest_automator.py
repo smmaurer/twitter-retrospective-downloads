@@ -44,6 +44,7 @@ class Automator(object):
         self.t0 = None  # initialization time
         self.fpath = ''  # output filepath
         self.f = None  # output file
+        self.e = None  # error file
         self.tcount = 0  # tweet count in current file
         self.fcount = 0  # count of output files
         self.nusers = len(user_ids)  # total number of user id's
@@ -61,19 +62,22 @@ class Automator(object):
         
         try: 
             for uid in self.user_ids:
-                try:
-                    self.process_user(uid)
+                for attempt in range(10):
+                    # Retry up to 10 times per ID if API is overloaded
+                    try:
+                        self.process_user(uid)
+                        break
 
-                except (TwitterError.TwitterRequestError, 
-                            TwitterError.TwitterConnectionError) as e:
-                    # Continue with next user, but with increasing delays in case there's
-                    # some other issue
-                    self.delay = self.delay * 2
-                    print("\n" + str(dt.now()))
-                    print("{}: {}".format(type(e).__name__, e))
-                    print("Continuing after {} sec. delay".format(RATE_LIMIT_INTERVAL))
-                    time.sleep(RATE_LIMIT_INTERVAL)
-                    continue
+                    except (TwitterError.TwitterRequestError, 
+                                TwitterError.TwitterConnectionError) as e:
+                        # http://geduldig.github.io/TwitterAPI/faulttolerance.html
+                        # https://dev.twitter.com/overview/api/response-codes
+                        print("{}: {}".format(type(e).__name__, e))
+                        time.sleep(RATE_LIMIT_INTERVAL)
+                        if e.status_code in [503, 504]:
+                            continue
+                        self._log_error(e.status_code)
+                        break
                     
             self._close_files()
 
@@ -184,8 +188,21 @@ class Automator(object):
             self.tcount = 0
 
 
+    def _log_error(self, status_code):
+        '''Log an error code'''
+        if not self.e:
+            self.e = open(OUTPUT_PATH + self.fname_base + '.errors.csv', 'a')
+            self.e.write('status_code\n')
+        
+        self.e.write(str(status_code) + '\n')
+            
+    
     def _close_files(self):
         '''Close output file and compress if requested'''
+        
+        if self.e:
+            self.e.close()
+            self.e = None  # in case there's a subsequent output file
         
         if (self.fcount > 0):
             # close the output file
